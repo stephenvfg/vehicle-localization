@@ -65,7 +65,7 @@ void ParticleFilter::prediction(double delta_t, double std_pos[],
   default_random_engine gen;
   normal_distribution<double> dist_v_x(velocity, std_pos[0]);
   normal_distribution<double> dist_v_y(velocity, std_pos[1]);
-  normal_distribution<double> dist_yaw(yaw_rate, std_pos[1]);
+  normal_distribution<double> dist_yaw(yaw_rate, std_pos[2]);
 
   // Apply the prediction step to each particle
   for (int i = 0; i < num_particles; ++i) {
