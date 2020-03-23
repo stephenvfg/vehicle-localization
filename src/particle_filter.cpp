@@ -20,30 +20,75 @@
 
 using std::string;
 using std::vector;
+using std::default_random_engine;
+using std::normal_distribution;
 
 void ParticleFilter::init(double x, double y, double theta, double std[]) {
-  /**
-   * TODO: Set the number of particles. Initialize all particles to 
-   *   first position (based on estimates of x, y, theta and their uncertainties
-   *   from GPS) and all weights to 1. 
-   * TODO: Add random Gaussian noise to each particle.
-   * NOTE: Consult particle_filter.h for more information about this method 
-   *   (and others in this file).
-   */
-  num_particles = 0;  // TODO: Set the number of particles
+  // Set up Particle vector
+  num_particles = 1000;
+  particles = std::vector<Particle>();
+  weights = std::vector<double>(); 
 
+  // Create normal (Gaussian) distributions for x, y, theta to account for noise
+  default_random_engine gen;
+  normal_distribution<double> dist_x(x, std[0]);
+  normal_distribution<double> dist_y(y, std[1]);
+  normal_distribution<double> dist_theta(theta, std[2]);
+
+  // Initialize each particle with approximations from the GPS location data
+  for (int i = 0; i < num_particles; ++i) { 
+    // Initialize particle
+    Particle p;
+    p.id = i;
+    p.x = dist_x(gen);
+    p.y = dist_y(gen);
+    p.theta = dist_theta(gen);
+    p.weight = 1;
+
+    // Add Particle and weight to respective vectors
+    particles.push_back(p);
+    weights.push_back(p.weight);
+
+    // Print the first 10 particles -- set this to `true` when debugging.
+    if (false && i < 10) {
+      std::cout << "ParticleFilter::init| Particle " << i + 1 << " " << particles[i].x << " " << particles[i].y << " " 
+                << particles[i].theta << std::endl;
+    }
+  }
+
+  is_initialized = true;
 }
 
 void ParticleFilter::prediction(double delta_t, double std_pos[], 
                                 double velocity, double yaw_rate) {
-  /**
-   * TODO: Add measurements to each particle and add random Gaussian noise.
-   * NOTE: When adding noise you may find std::normal_distribution 
-   *   and std::default_random_engine useful.
-   *  http://en.cppreference.com/w/cpp/numeric/random/normal_distribution
-   *  http://www.cplusplus.com/reference/random/default_random_engine/
-   */
+  // Create normal (Gaussian) distributions for velocity, yaw_rate to account for noise
+  default_random_engine gen;
+  normal_distribution<double> dist_v_x(velocity, std_pos[0]);
+  normal_distribution<double> dist_v_y(velocity, std_pos[1]);
+  normal_distribution<double> dist_yaw(yaw_rate, std_pos[1]);
 
+  // Apply the prediction step to each particle
+  for (int i = 0; i < num_particles; ++i) {
+    // Obtain noisey values for velocity, yaw_rate
+    double velocity_x_n = dist_v_x(gen);
+    double velocity_y_n = dist_v_y(gen);
+    double yaw_rate_n = dist_yaw(gen);
+
+    // Update yaw and positions
+    double theta_f = particles[i].theta + (yaw_rate_n*delta_t);
+    double x_f = particles[i].x + (velocity_x_n/yaw_rate_n) * (sin(theta_f) - sin(particles[i].theta));
+    double y_f = particles[i].y + (velocity_y_n/yaw_rate_n) * (cos(particles[i].theta) - cos(theta_f));
+
+    // Set the updated Particle values
+    particles[i].x = x_f;
+    particles[i].y = y_f;
+    particles[i].theta = theta_f;
+
+    // Print the first 10 particles -- set this to `true` when debugging.
+    if (false && i < 10) {
+      std::cout << "ParticleFilter::prediction| Particle " << i + 1 << " " << x_f << " " << y_f << " " << theta_f << std::endl;
+    }
+  }
 }
 
 void ParticleFilter::dataAssociation(vector<LandmarkObs> predicted, 
