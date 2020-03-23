@@ -23,6 +23,9 @@ using std::vector;
 using std::default_random_engine;
 using std::normal_distribution;
 
+// Define a random engine generator to use throughout
+static default_random_engine gen;
+
 void ParticleFilter::init(double x, double y, double theta, double std[]) {
   // Set up Particle vector
   num_particles = 1000;
@@ -30,7 +33,6 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
   weights = std::vector<double>(); 
 
   // Create normal (Gaussian) distributions for x, y, theta to account for noise
-  default_random_engine gen;
   normal_distribution<double> dist_x(x, std[0]);
   normal_distribution<double> dist_y(y, std[1]);
   normal_distribution<double> dist_theta(theta, std[2]);
@@ -51,8 +53,8 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
 
     // Print the first 10 particles -- set this to `true` when debugging.
     if (false && i < 10) {
-      std::cout << "ParticleFilter::init| Particle " << i + 1 << " " << particles[i].x << " " << particles[i].y << " " 
-                << particles[i].theta << std::endl;
+      std::cout << "ParticleFilter::init| Particle " << i + 1 << " " << particles[i].x << " " 
+                << particles[i].y << " " << particles[i].theta << std::endl;
     }
   }
 
@@ -61,47 +63,63 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
 
 void ParticleFilter::prediction(double delta_t, double std_pos[], 
                                 double velocity, double yaw_rate) {
-  // Create normal (Gaussian) distributions for velocity, yaw_rate to account for noise
-  default_random_engine gen;
-  normal_distribution<double> dist_v_x(velocity, std_pos[0]);
-  normal_distribution<double> dist_v_y(velocity, std_pos[1]);
-  normal_distribution<double> dist_yaw(yaw_rate, std_pos[2]);
-
   // Apply the prediction step to each particle
-  for (int i = 0; i < num_particles; ++i) {
-    // Obtain noisey values for velocity, yaw_rate
-    double velocity_x_n = dist_v_x(gen);
-    double velocity_y_n = dist_v_y(gen);
-    double yaw_rate_n = dist_yaw(gen);
+  for (auto & part : particles) {
+    // Obtain old values for x, y, theta
+    double x = part.x;
+    double y = part.y;
+    double theta = part.theta;
 
-    // Update yaw and positions
-    double theta_f = particles[i].theta + (yaw_rate_n*delta_t);
-    double x_f = particles[i].x + (velocity_x_n/yaw_rate_n) * (sin(theta_f) - sin(particles[i].theta));
-    double y_f = particles[i].y + (velocity_y_n/yaw_rate_n) * (cos(particles[i].theta) - cos(theta_f));
+    // Prepare to calculate predictions based on whether or not the vehicle is turning
+    double theta_f, x_f, y_f;
 
-    // Set the updated Particle values
-    particles[i].x = x_f;
-    particles[i].y = y_f;
-    particles[i].theta = theta_f;
+    if (yaw_rate < 0.001) {
+      // Update yaw and positions using the equations for a vehicle going straight
+      x_f = x + velocity * delta_t * cos(theta);
+      y_f = y + velocity * delta_t * sin(theta);
+      theta_f = theta;
+    } else {
+      // Update yaw and positions using the equations for a turning vehicle
+      theta_f = theta + (yaw_rate*delta_t);
+      x_f = x + (velocity/yaw_rate) * (sin(theta_f) - sin(theta));
+      y_f = y + (velocity/yaw_rate) * (cos(theta) - cos(theta_f));
+    }
 
-    // Print the first 10 particles -- set this to `true` when debugging.
-    if (false && i < 10) {
-      std::cout << "ParticleFilter::prediction| Particle " << i + 1 << " " << x_f << " " << y_f << " " << theta_f << std::endl;
+    // Create normal (Gaussian) distributions for velocity, yaw_rate to account for noise
+    normal_distribution<double> dist_x(x_f, std_pos[0]);
+    normal_distribution<double> dist_y(y_f, std_pos[1]);
+    normal_distribution<double> dist_theta(theta_f, std_pos[2]);
+
+    // Set the updated Particle values based on the noisy distribution
+    part.x = dist_x(gen);
+    part.y = dist_y(gen);
+    part.theta = dist_theta(gen);
+
+    // Print a subset of particles -- set this to `true` when debugging.
+    if (false && part.id < 20) {
+      std::cout << "ParticleFilter::prediction| Particle " << part.id + 1 << " " << part.x 
+                << " " << part.y << " " << part.theta << std::endl;
     }
   }
 }
 
 void ParticleFilter::dataAssociation(vector<LandmarkObs> predicted, 
                                      vector<LandmarkObs>& observations) {
-  /**
-   * TODO: Find the predicted measurement that is closest to each 
-   *   observed measurement and assign the observed measurement to this 
-   *   particular landmark.
-   * NOTE: this method will NOT be called by the grading code. But you will 
-   *   probably find it useful to implement this method and use it as a helper 
-   *   during the updateWeights phase.
-   */
+  // Cycle through each observation to find its closest prediction
+  for (auto & obs : observations) {
 
+    // Define a placeholder to represent the minimum distance between predicted<->observed so far
+    double min_dist = std::numeric_limits<double>::max();
+
+    // Calculate the distance for every prediction to find the nearest neighbor
+    for (auto & pred : predicted) {
+      double curr_dist = dist(obs.x, obs.y, pred.x, pred.y);
+      if (curr_dist < min_dist) {
+        min_dist = curr_dist;
+        obs.id = pred.id;
+      }
+    }
+  }
 }
 
 void ParticleFilter::updateWeights(double sensor_range, double std_landmark[], 
@@ -120,7 +138,14 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
    *   and the following is a good resource for the actual equation to implement
    *   (look at equation 3.33) http://planning.cs.uiuc.edu/node99.html
    */
+  // Create normal (Gaussian) distributions for landmark measurements to account for noise
+  //normal_distribution<double> dist_x(velocity, std_pos[0]);
+  //normal_distribution<double> dist_y(velocity, std_pos[1]);
 
+  // Apply the prediction step to each particle
+  //for (int i = 0; i < num_particles; ++i) {
+
+  //}
 }
 
 void ParticleFilter::resample() {
