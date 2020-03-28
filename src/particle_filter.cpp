@@ -63,11 +63,11 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
 void ParticleFilter::prediction(double delta_t, double std_pos[], 
                                 double velocity, double yaw_rate) {
   // Apply the prediction step to each particle
-  for (int i = 0; i < num_particles; ++i) {
+  for (auto & part : particles) {
     // Obtain old values for x, y, theta
-    double x = particles[i].x;
-    double y = particles[i].y;
-    double theta = particles[i].theta;
+    double x = part.x;
+    double y = part.y;
+    double theta = part.theta;
 
     // Prepare to calculate predictions based on whether or not the vehicle is turning
     double theta_f, x_f, y_f;
@@ -90,14 +90,14 @@ void ParticleFilter::prediction(double delta_t, double std_pos[],
     normal_distribution<double> dist_theta(theta_f, std_pos[2]);
 
     // Set the updated Particle values based on the noisy distribution
-    particles[i].x = dist_x(gen);
-    particles[i].y = dist_y(gen);
-    particles[i].theta = dist_theta(gen);
+    part.x = dist_x(gen);
+    part.y = dist_y(gen);
+    part.theta = dist_theta(gen);
 
     // Print a subset of particles -- set this to `true` when debugging.
-    if (false && particles[i].id < 20) {
-      std::cout << "ParticleFilter::prediction| Particle " << particles[i].id + 1 << " " 
-                << particles[i].x << " " << particles[i].y << " " << particles[i].theta << std::endl;
+    if (false && part.id < 20) {
+      std::cout << "ParticleFilter::prediction| Particle " << part.id + 1 << " " 
+                << part.x << " " << part.y << " " << part.theta << std::endl;
     }
   }
 }
@@ -125,32 +125,29 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
                                    const vector<LandmarkObs> &observations, 
                                    const Map &map_landmarks) {
   // Cycle through each particle
-  for (int i = 0; i < num_particles; ++i) {
+  for (auto & part : particles) {
 
     // Isolate the landmarks that are in range of the sensor
     vector<LandmarkObs> map_landmarks_ir = vector<LandmarkObs>();
-    for (int j = 0; j < map_landmarks.landmark_list.size(); ++j) {
-      double distance = dist(particles[i].x, particles[i].y, 
-                        map_landmarks.landmark_list[j].x_f, map_landmarks.landmark_list[j].y_f);
+    for (auto & land : map_landmarks.landmark_list) {
+      double distance = dist(part.x, part.y, land.x_f, land.y_f);
       if (distance <= sensor_range) {
         LandmarkObs landmark_ir = LandmarkObs();
-        landmark_ir.x = map_landmarks.landmark_list[j].x_f;
-        landmark_ir.y = map_landmarks.landmark_list[j].y_f;
-        landmark_ir.id = map_landmarks.landmark_list[j].id_i;
+        landmark_ir.x = land.x_f;
+        landmark_ir.y = land.y_f;
+        landmark_ir.id = land.id_i;
         map_landmarks_ir.push_back(landmark_ir);
       }
     }
 
     // Transform the vehicle observations into landmark coordinates for each observation
     vector<LandmarkObs> trans_observations = vector<LandmarkObs>();
-    for (int j = 0; j < observations.size(); ++j) {
+    for (auto & obs : observations) {
       // Transform sensor landmark observations to map coordinates
       LandmarkObs trans_obs = LandmarkObs(); 
-      trans_obs.x = particles[i].x + cos(particles[i].theta)*observations[j].x 
-                    - sin(particles[i].theta)*observations[j].y;
-      trans_obs.y = particles[i].y + sin(particles[i].theta)*observations[j].x 
-                    + cos(particles[i].theta)*observations[j].y;
-      trans_obs.id = observations[j].id;
+      trans_obs.x = part.x + cos(part.theta)*obs.x - sin(part.theta)*obs.y;
+      trans_obs.y = part.y + sin(part.theta)*obs.x + cos(part.theta)*obs.y;
+      trans_obs.id = obs.id;
       trans_observations.push_back(trans_obs);
     }
 
@@ -161,22 +158,22 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
     double particle_weight = 1.0;
 
     // Cycle through the associated observations to update the respective particle weights
-    for (int j = 0; j < trans_observations.size(); ++j) {
+    for (auto & obs : trans_observations) {
       double mu_x, mu_y;
 
-      for (int k = 0; k < map_landmarks_ir.size(); ++k) {
+      for (auto & land : map_landmarks_ir) {
         // Find the observation <-> landmark associated pair
-        if (trans_observations[j].id == map_landmarks_ir[k].id) {
-          mu_x = map_landmarks_ir[k].x;
-          mu_y = map_landmarks_ir[k].y;
+        if (obs.id == land.id) {
+          mu_x = land.x;
+          mu_y = land.y;
           break;
         }
       }
 
       // Update weights using the Gaussian probability density function
       double gauss_norm = 1 / (2*M_PI * std_landmark[0] * std_landmark[1]);
-      double exponent = (pow(trans_observations[j].x - mu_x, 2) / (2 * pow(std_landmark[0], 2)))
-                        + (pow(trans_observations[j].y - mu_y, 2) / (2 * pow(std_landmark[1], 2)));
+      double exponent = (pow(obs.x - mu_x, 2) / (2 * pow(std_landmark[0], 2)))
+                        + (pow(obs.y - mu_y, 2) / (2 * pow(std_landmark[1], 2)));
       double obs_weight = gauss_norm * exp(-1*exponent);
       if (obs_weight < 0.00001) {
         obs_weight = 0.00001;
@@ -185,18 +182,18 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
     }
 
     // Set the particle weight
-    particles[i].weight = particle_weight;
+    part.weight = particle_weight;
   }
 
   // Normalize the particle weights
   double normalize_factor = 0.0;
-  for (int i = 0; i < num_particles; i++) {
-    normalize_factor += particles[i].weight;
+  for (auto & part : particles) {
+    normalize_factor += part.weight;
   }
 
-  for (int i = 0; i < num_particles; i++) {
+  for (auto & part : particles) {
     // Prevent division by zero
-    particles[i].weight /= normalize_factor + std::numeric_limits<double>::epsilon();
+    part.weight /= normalize_factor + std::numeric_limits<double>::epsilon();
   }
 }
 
